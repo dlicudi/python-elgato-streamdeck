@@ -10,6 +10,7 @@ import ctypes
 import ctypes.util
 import os
 import platform
+import sys
 import threading
 
 from .Transport import Transport, TransportError
@@ -59,7 +60,31 @@ class LibUSBHIDAPI(Transport):
             if not self.HOMEBREW_PREFIX:
                 type(self).HOMEBREW_PREFIX = self._get_homebrew_path()
 
+            frozen_base = getattr(sys, "_MEIPASS", None)
+
             for lib_name in library_search_list:
+                if frozen_base:
+                    frozen_candidates = [
+                        os.path.join(frozen_base, lib_name),
+                    ]
+
+                    if self.platform_name == "Darwin":
+                        frozen_candidates = [
+                            os.path.join(frozen_base, "libhidapi.0.dylib"),
+                            os.path.join(frozen_base, "libhidapi.dylib"),
+                        ]
+
+                    for frozen_candidate in frozen_candidates:
+                        if os.path.exists(frozen_candidate):
+                            try:
+                                type(self).HIDAPI_INSTANCE = ctypes.cdll.LoadLibrary(frozen_candidate)
+                                break
+                            except: # nosec B110
+                                pass
+
+                    if self.HIDAPI_INSTANCE:
+                        break
+
                 # We'll try to use ctypes' utility function to find the library first, using
                 # its default search paths. It requires the name of the library only (minus all
                 # path prefix and extension suffix).
@@ -153,7 +178,7 @@ class LibUSBHIDAPI(Transport):
             search_library_names = {
                 "Windows": ["hidapi.dll", "libhidapi-0.dll", "./hidapi.dll"],
                 "Linux": ["libhidapi-libusb.so", "libhidapi-libusb.so.0"],
-                "Darwin": ["libhidapi.dylib"],
+                "Darwin": ["libhidapi.0.dylib", "libhidapi.dylib"],
                 "FreeBSD": ["libhidapi.so"],
             }
 
