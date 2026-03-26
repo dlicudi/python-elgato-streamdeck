@@ -8,6 +8,7 @@
 import atexit
 import ctypes
 import ctypes.util
+import glob
 import os
 import platform
 import sys
@@ -64,15 +65,14 @@ class LibUSBHIDAPI(Transport):
 
             for lib_name in library_search_list:
                 if frozen_base:
-                    frozen_candidates = [
-                        os.path.join(frozen_base, lib_name),
-                    ]
+                    frozen_candidates = [os.path.join(frozen_base, lib_name)]
 
                     if self.platform_name == "Darwin":
                         frozen_candidates = [
                             os.path.join(frozen_base, "libhidapi.0.dylib"),
                             os.path.join(frozen_base, "libhidapi.dylib"),
                         ]
+                        frozen_candidates.extend(sorted(glob.glob(os.path.join(frozen_base, "libhidapi*.dylib"))))
 
                     for frozen_candidate in frozen_candidates:
                         if os.path.exists(frozen_candidate):
