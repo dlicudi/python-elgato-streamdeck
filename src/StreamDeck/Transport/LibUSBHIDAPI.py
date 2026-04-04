@@ -196,7 +196,7 @@ class LibUSBHIDAPI(Transport):
             """
 
             search_library_names = {
-                "Windows": ["hidapi.dll", "libhidapi-0.dll", "./hidapi.dll"],
+                "Windows": ["libhidapi-libusb-0.dll", "hidapi-libusb.dll", "libhidapi-0.dll", "hidapi.dll", "./hidapi.dll"],
                 "Linux": ["libhidapi-libusb.so", "libhidapi-libusb.so.0"],
                 "Darwin": ["libhidapi.0.dylib", "libhidapi.dylib"],
                 "FreeBSD": ["libhidapi.so"],
