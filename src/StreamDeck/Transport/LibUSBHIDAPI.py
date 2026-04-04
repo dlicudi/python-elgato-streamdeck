@@ -27,6 +27,13 @@ class LibUSBHIDAPI(Transport):
         HIDAPI_INSTANCE = None
         HOMEBREW_PREFIX = None
 
+        def _debug_enabled(self):
+            return os.environ.get("COCKPITDECKS_HID_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}
+
+        def _debug(self, message):
+            if self._debug_enabled():
+                print(f"[streamdeck-hid] {message}", flush=True)
+
         def _get_homebrew_path(self):
             if self.platform_name != "Darwin":
                 return None
@@ -62,8 +69,10 @@ class LibUSBHIDAPI(Transport):
                 type(self).HOMEBREW_PREFIX = self._get_homebrew_path()
 
             frozen_base = getattr(sys, "_MEIPASS", None)
+            load_errors = []
 
             for lib_name in library_search_list:
+                self._debug(f"trying library name {lib_name!r}")
                 if frozen_base:
                     frozen_candidates = [os.path.join(frozen_base, lib_name)]
 
@@ -75,12 +84,15 @@ class LibUSBHIDAPI(Transport):
                         frozen_candidates.extend(sorted(glob.glob(os.path.join(frozen_base, "libhidapi*.dylib"))))
 
                     for frozen_candidate in frozen_candidates:
+                        self._debug(f"checking frozen candidate {frozen_candidate}")
                         if os.path.exists(frozen_candidate):
                             try:
                                 type(self).HIDAPI_INSTANCE = ctypes.cdll.LoadLibrary(frozen_candidate)
+                                self._debug(f"loaded frozen candidate {frozen_candidate}")
                                 break
-                            except: # nosec B110
-                                pass
+                            except Exception as exc: # nosec B110
+                                load_errors.append(f"{frozen_candidate}: {exc}")
+                                self._debug(f"failed frozen candidate {frozen_candidate}: {exc}")
 
                     if self.HIDAPI_INSTANCE:
                         break
@@ -91,7 +103,9 @@ class LibUSBHIDAPI(Transport):
                 library_name_no_extension = os.path.basename(os.path.splitext(lib_name)[0])
                 try:
                     found_lib = ctypes.util.find_library(library_name_no_extension)
-                except:
+                    self._debug(f"find_library({library_name_no_extension!r}) -> {found_lib!r}")
+                except Exception as exc:
+                    self._debug(f"find_library({library_name_no_extension!r}) failed: {exc}")
                     found_lib = None
 
                 # If we've running with a Homebrew installation, and find_library() didn't find the library in
@@ -103,11 +117,17 @@ class LibUSBHIDAPI(Transport):
                         found_lib = library_path_homebrew
 
                 try:
-                    type(self).HIDAPI_INSTANCE = ctypes.cdll.LoadLibrary(found_lib if found_lib else lib_name)
+                    load_target = found_lib if found_lib else lib_name
+                    self._debug(f"loading target {load_target!r}")
+                    type(self).HIDAPI_INSTANCE = ctypes.cdll.LoadLibrary(load_target)
+                    self._debug(f"loaded target {load_target!r}")
                     break
-                except: # nosec B110
-                    pass
+                except Exception as exc: # nosec B110
+                    load_errors.append(f"{found_lib if found_lib else lib_name}: {exc}")
+                    self._debug(f"failed target {found_lib if found_lib else lib_name!r}: {exc}")
             else:
+                if load_errors:
+                    raise TransportError("No suitable LibUSB HIDAPI library found. Load attempts: " + " | ".join(load_errors))
                 return None
 
             class hid_device_info(ctypes.Structure):
